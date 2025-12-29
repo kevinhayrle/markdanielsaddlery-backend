@@ -1,0 +1,74 @@
+const express = require("express");
+const router = express.Router();
+
+const {
+  handleCheckout
+} = require("../controllers/checkoutController");
+
+/*
+  =========================
+  PAYPAL PAYMENT ROUTES
+  =========================
+*/
+
+/**
+ * Create PayPal Order
+ * POST /api/checkout/paypal/create-order
+ */
+router.post("/paypal/create-order", async (req, res) => {
+  try {
+    const { amount } = req.body;
+
+    if (!amount) {
+      return res.status(400).json({ error: "Amount is required" });
+    }
+
+    const { createPaypalOrder } = require("../services/paypalService");
+    const orderID = await createPaypalOrder(amount);
+
+    res.json({ orderID });
+  } catch (err) {
+    console.error("❌ PayPal create-order error:", err);
+    res.status(500).json({ error: "Failed to create PayPal order" });
+  }
+});
+
+/**
+ * Capture PayPal Order
+ * POST /api/checkout/paypal/capture-order
+ */
+router.post("/paypal/capture-order", async (req, res) => {
+  try {
+    const { orderID } = req.body;
+
+    if (!orderID) {
+      return res.status(400).json({ error: "Order ID is required" });
+    }
+
+    const { capturePaypalOrder } = require("../services/paypalService");
+    const captureData = await capturePaypalOrder(orderID);
+
+    res.json({
+      success: true,
+      captureId: captureData.captureId
+    });
+  } catch (err) {
+    console.error("❌ PayPal capture-order error:", err);
+    res.status(500).json({ error: "Failed to capture PayPal payment" });
+  }
+});
+
+/*
+  =========================
+  EXISTING ORDER SAVE LOGIC
+  (UNCHANGED)
+  =========================
+*/
+
+/**
+ * Save order after successful payment
+ * POST /api/checkout
+ */
+router.post("/", handleCheckout);
+
+module.exports = router;
