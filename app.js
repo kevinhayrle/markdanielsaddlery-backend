@@ -33,12 +33,16 @@ try {
   const couponRoutes = require('./routes/couponRoutes');
   const checkoutRoutes = require("./routes/checkoutRoutes");
   const orderRoutes = require("./routes/orderRoutes");
+  const userRoutes = require('./routes/UserRoutes');
+
 
   app.use('/api/products', publicProductRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/coupons', couponRoutes);
   app.use('/api/checkout', checkoutRoutes);
   app.use('/api', orderRoutes);
+  app.use('/api/users', userRoutes);
+
 
   console.log('✅ Routes registered');
 } catch (err) {
