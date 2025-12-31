@@ -22,7 +22,15 @@ const UserSchema = new mongoose.Schema(
 
     password: {
       type: String,
-      required: true // stored as hashed
+      required: true
+    },
+
+    otp: {
+      type: String
+    },
+
+    otpExpiry: {
+      type: Date
     },
 
     address: {

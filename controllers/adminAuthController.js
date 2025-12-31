@@ -7,7 +7,6 @@ const adminLogin = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    // 🔁 MySQL SELECT → Mongo findOne
     const admin = await Admin.findOne({ email });
 
     if (!admin) {
