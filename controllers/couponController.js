@@ -166,3 +166,29 @@ exports.applyCoupon = async (req, res) => {
     res.status(500).json({ error: "Server error while applying coupon." });
   }
 };
+
+/*
+================================================
+✅ GET ACTIVE COUPONS (PUBLIC)
+GET /api/coupons
+================================================
+*/
+exports.getPublicCoupons = async (req, res) => {
+  try {
+    const today = new Date();
+
+    const coupons = await Coupon.find({
+      isActive: true,
+      $or: [
+        { expiryDate: { $gte: today } },
+        { expiryDate: null }
+      ]
+    }).sort({ createdAt: -1 });
+
+    res.json(coupons);
+
+  } catch (err) {
+    console.error("Error fetching public coupons:", err);
+    res.status(500).json({ error: "Failed to fetch coupons." });
+  }
+};

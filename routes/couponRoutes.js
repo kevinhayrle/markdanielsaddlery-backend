@@ -1,7 +1,18 @@
 const express = require('express');
 const router = express.Router();
 
-const { applyCoupon } = require('../controllers/couponController');
+const {
+  applyCoupon,
+  getPublicCoupons
+} = require('../controllers/couponController');
+
+/*
+=================================
+✅ GET ACTIVE COUPONS (PUBLIC)
+GET /api/coupons
+=================================
+*/
+router.get('/', getPublicCoupons);
 
 /*
 =================================
