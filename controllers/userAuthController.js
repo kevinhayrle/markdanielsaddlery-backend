@@ -6,61 +6,73 @@ const { sendOTPEmail } = require('../utils/mailer');
 require('dotenv').config();
 
 /* =======================
-   HELPER : GENERATE OTP
+   HELPERS
 ======================= */
-const generateOTP = () => {
-  return crypto.randomInt(100000, 999999).toString();
-};
+
+// Generate 6-digit OTP
+const generateOTP = () => crypto.randomInt(100000, 999999).toString();
+
+// Generate JWT
+const generateToken = (user) =>
+  jwt.sign(
+    { userId: user._id, email: user.email },
+    process.env.JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+
+// Normalize email
+const normalizeEmail = (email) => email.toLowerCase().trim();
 
 /* =======================
-   USER REGISTER
+   REGISTER USER
 ======================= */
 const registerUser = async (req, res) => {
-  const { name, email, phone, password } = req.body;
+  let { name, email, phone, password } = req.body;
+  email = normalizeEmail(email);
 
   try {
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      if (!existingUser.isVerified) {
-        // regenerate OTP
-        const otp = generateOTP();
-        const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+    let user = await User.findOne({ email });
 
-        existingUser.otp = otp;
-        existingUser.otpExpiry = otpExpiry;
-        await existingUser.save();
+    // If user exists but not verified → resend OTP
+    if (user && !user.isVerified) {
+      const otp = generateOTP();
 
-        await sendOTPEmail(email, otp, existingUser.name, 'signup');
+      user.otp = otp;
+      user.otpType = 'signup';
+      user.otpExpiry = Date.now() + 10 * 60 * 1000;
+      user.otpAttempts = 0;
+      await user.save();
 
-        return res.status(200).json({
-          message: 'OTP already sent. Please verify your account.'
-        });
-      }
+      await sendOTPEmail(email, otp, user.name, 'signup');
 
-      return res.status(400).json({ message: 'Account already exists. Please Sign in' });
+      return res.json({
+        message: 'OTP already sent. Please verify your account.'
+      });
     }
 
-    // Hash password (UNCHANGED)
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    // If user already verified
+    if (user && user.isVerified) {
+      return res.status(400).json({
+        message: 'Account already exists. Please login.'
+      });
+    }
 
-    // Generate OTP
+    // Create new user
+    const hashedPassword = await bcrypt.hash(password, 10);
     const otp = generateOTP();
-    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
 
-    // Create user (EXTENDED, NOT CHANGED)
-    const user = await User.create({
+    user = await User.create({
       name,
       email,
       phone,
       password: hashedPassword,
       otp,
-      otpExpiry,
+      otpType: 'signup',
+      otpExpiry: Date.now() + 10 * 60 * 1000,
+      otpAttempts: 0,
       isVerified: false
     });
 
-    // Send OTP email via Mailjet
     await sendOTPEmail(email, otp, name, 'signup');
 
     res.status(201).json({
@@ -68,39 +80,39 @@ const registerUser = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('User registration error:', error);
+    console.error('Register error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
 
 /* =======================
-   RESEND OTP (ADDED ONLY)
+   RESEND OTP
 ======================= */
 const resendOtp = async (req, res) => {
-  const { email } = req.body;
+  let { email, type = 'signup' } = req.body;
+  email = normalizeEmail(email);
 
   try {
     const user = await User.findOne({ email });
 
-    if (!user) {
+    if (!user)
       return res.status(404).json({ message: 'User not found' });
+
+    if (type === 'signup' && user.isVerified) {
+      return res.status(400).json({
+        message: 'Account already verified. Please login.'
+      });
     }
 
- if (!user.isVerified) {
-  return res.status(403).json({
-    message: 'Please verify your email first'
-  });
-}
-
-
     const otp = generateOTP();
-    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
     user.otp = otp;
-    user.otpExpiry = otpExpiry;
+    user.otpType = type;
+    user.otpExpiry = Date.now() + 10 * 60 * 1000;
+    user.otpAttempts = 0;
     await user.save();
 
-    await sendOTPEmail(user.email, otp, user.name, 'signup');
+    await sendOTPEmail(email, otp, user.name, type);
 
     res.json({ message: 'OTP resent successfully' });
 
@@ -111,86 +123,94 @@ const resendOtp = async (req, res) => {
 };
 
 /* =======================
-   VERIFY OTP
+   VERIFY OTP (AUTO LOGIN)
 ======================= */
 const verifyOtp = async (req, res) => {
-  const { email, otp, type = 'signup'} = req.body;
+  let { email, otp, type = 'signup' } = req.body;
+  email = normalizeEmail(email);
 
   try {
     const user = await User.findOne({ email });
 
-    if (!user) {
-      return res.status(404).json({ message: 'Invalid OTP' });
-    }
-
-    if (type == 'signup' && user.isVerified) {
-      return res.status(400).json({ message: 'User already verified' });
-    }
-
-    if (!user.otp || user.otp !== otp) {
+    if (!user || !user.otp)
       return res.status(400).json({ message: 'Invalid OTP' });
-    }
 
-    if (user.otpExpiry < Date.now()) {
+    if (user.otpType !== type)
+      return res.status(400).json({ message: 'Invalid OTP type' });
+
+    if (user.otpExpiry < Date.now())
       return res.status(400).json({ message: 'OTP expired' });
+
+    user.otpAttempts += 1;
+    if (user.otpAttempts > 5)
+      return res.status(429).json({ message: 'Too many attempts. Resend OTP.' });
+
+    if (user.otp !== otp)
+      return res.status(400).json({ message: 'Invalid OTP' });
+
+    // Mark verified for signup
+    if (type === 'signup') {
+      user.isVerified = true;
     }
 
-    // Mark user as verified
-if (type === 'signup') {
-  user.isVerified = true;
-}
-
-user.otp = undefined;
-user.otpExpiry = undefined;
+    user.otp = undefined;
+    user.otpType = undefined;
+    user.otpExpiry = undefined;
+    user.otpAttempts = 0;
 
     await user.save();
 
-    res.json({ message: 'Account verified successfully' });
+    const token = generateToken(user);
+
+    res.json({
+      message: 'Account verified and logged in successfully',
+      token,
+      user: {
+        name: user.name,
+        email: user.email,
+        phone: user.phone
+      }
+    });
 
   } catch (error) {
-    console.error('OTP verification error:', error);
+    console.error('Verify OTP error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
 
 /* =======================
-   USER LOGIN
+   LOGIN USER
 ======================= */
 const loginUser = async (req, res) => {
-  const { email, password } = req.body;
+  let { email, password } = req.body;
+  email = normalizeEmail(email);
 
   try {
-  const user = await User.findOne({ email });
+    const user = await User.findOne({ email });
 
-if (!user) {
-  return res.status(404).json({
-    message: 'No account found for this email'
-  });
-}
+    if (!user)
+      return res.status(404).json({ message: 'No account found' });
 
-
-    // BLOCK LOGIN IF NOT VERIFIED
-    if (!user.isVerified) {
-      return res.status(403).json({
-        message: 'Your email is not verified. Sign up again'
-      });
-    }
+    if (!user.isVerified)
+      return res.status(403).json({ message: 'Email not verified' });
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid email or password' });
-    }
+    if (!isMatch)
+      return res.status(401).json({ message: 'Invalid credentials' });
 
-    const token = jwt.sign(
-      { userId: user._id, email: user.email },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    const token = generateToken(user);
 
-    res.json({ token });
+    res.json({
+      token,
+      user: {
+        name: user.name,
+        email: user.email,
+        phone: user.phone
+      }
+    });
 
   } catch (error) {
-    console.error('User login error:', error);
+    console.error('Login error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -202,26 +222,23 @@ const getUserProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user.userId).select('-password');
 
-    if (!user) {
+    if (!user)
       return res.status(404).json({ message: 'User not found' });
-    }
 
     res.json(user);
+
   } catch (error) {
-    console.error('Get profile error:', error);
+    console.error('Profile error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
 
 /* =======================
-   UPDATE USER PROFILE
+   UPDATE PROFILE
 ======================= */
 const updateUserProfile = async (req, res) => {
   try {
-    // Prevent email update at backend level
-    if (req.body.email) {
-      delete req.body.email;
-    }
+    delete req.body.email;
 
     const updatedUser = await User.findByIdAndUpdate(
       req.user.userId,
@@ -233,6 +250,7 @@ const updateUserProfile = async (req, res) => {
       message: 'Profile updated successfully',
       user: updatedUser
     });
+
   } catch (error) {
     console.error('Update profile error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -240,7 +258,7 @@ const updateUserProfile = async (req, res) => {
 };
 
 /* =======================
-   DELETE USER ACCOUNT
+   DELETE ACCOUNT
 ======================= */
 const deleteUser = async (req, res) => {
   try {
@@ -256,29 +274,25 @@ const deleteUser = async (req, res) => {
    FORGOT PASSWORD
 ======================= */
 const forgotPassword = async (req, res) => {
-  const { email } = req.body;
+  let { email } = req.body;
+  email = normalizeEmail(email);
 
   try {
     const user = await User.findOne({ email });
-
-    if (!user) {
-      return res.status(404).json({
-        message: 'No account found for this email'
-      });
-    }
+    if (!user)
+      return res.status(404).json({ message: 'No account found' });
 
     const otp = generateOTP();
-    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
     user.otp = otp;
-    user.otpExpiry = otpExpiry;
+    user.otpType = 'reset';
+    user.otpExpiry = Date.now() + 10 * 60 * 1000;
+    user.otpAttempts = 0;
     await user.save();
 
-    await sendOTPEmail(user.email, otp, user.name, 'reset');
+    await sendOTPEmail(email, otp, user.name, 'reset');
 
-    res.json({
-      message: 'OTP sent to your email to reset password'
-    });
+    res.json({ message: 'OTP sent for password reset' });
 
   } catch (error) {
     console.error('Forgot password error:', error);
@@ -290,29 +304,23 @@ const forgotPassword = async (req, res) => {
    RESET PASSWORD
 ======================= */
 const resetPassword = async (req, res) => {
-  const { email, password } = req.body;
+  let { email, password } = req.body;
+  email = normalizeEmail(email);
 
   try {
     const user = await User.findOne({ email });
+    if (!user)
+      return res.status(404).json({ message: 'User not found' });
 
-    if (!user) {
-      return res.status(404).json({
-        message: 'User not found'
-      });
-    }
-
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    user.password = hashedPassword;
+    user.password = await bcrypt.hash(password, 10);
     user.otp = undefined;
+    user.otpType = undefined;
     user.otpExpiry = undefined;
+    user.otpAttempts = 0;
 
     await user.save();
 
-    res.json({
-      message: 'Password updated successfully'
-    });
+    res.json({ message: 'Password updated successfully' });
 
   } catch (error) {
     console.error('Reset password error:', error);
@@ -320,15 +328,17 @@ const resetPassword = async (req, res) => {
   }
 };
 
-
+/* =======================
+   EXPORTS
+======================= */
 module.exports = {
   registerUser,
-  resendOtp,   // 👈 ADDED
+  resendOtp,
   verifyOtp,
   loginUser,
-   forgotPassword,   // 👈 ADD
-  resetPassword, 
   getUserProfile,
   updateUserProfile,
-  deleteUser
+  deleteUser,
+  forgotPassword,
+  resetPassword
 };
