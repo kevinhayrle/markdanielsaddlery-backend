@@ -29,8 +29,19 @@ const UserSchema = new mongoose.Schema(
       type: String
     },
 
+    otpType: {
+      type: String,
+      enum: ['signup', 'reset'],
+      default: 'signup'
+    },
+
     otpExpiry: {
       type: Date
+    },
+
+    otpAttempts: {
+      type: Number,
+      default: 0
     },
 
     address: {

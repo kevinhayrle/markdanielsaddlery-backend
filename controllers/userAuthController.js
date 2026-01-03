@@ -135,8 +135,12 @@ const verifyOtp = async (req, res) => {
     if (!user || !user.otp)
       return res.status(400).json({ message: 'Invalid OTP' });
 
-    if (user.otpType !== type)
-      return res.status(400).json({ message: 'Invalid OTP type' });
+// Backward compatibility for users created before otpType existed
+const otpType = user.otpType || 'signup';
+
+if (otpType !== type) {
+  return res.status(400).json({ message: 'Invalid OTP type' });
+}    
 
     if (user.otpExpiry < Date.now())
       return res.status(400).json({ message: 'OTP expired' });
