@@ -16,20 +16,21 @@ exports.addCoupon = async (req, res) => {
     expiry_date
   } = req.body;
 
-  // ---- Validation ----
-  if (!coupon_code || !discount_type || !discount_value || !expiry_date) {
+  // 🔒 Validation
+  if (
+    !coupon_code ||
+    !discount_type ||
+    discount_value === undefined ||
+    !expiry_date
+  ) {
     return res.status(400).json({
       error: "Coupon code, discount type, discount value and expiry date are required."
     });
   }
 
-  if (!["percentage", "flat"].includes(discount_type)) {
-    return res.status(400).json({ error: "Invalid discount type." });
-  }
-
   try {
-    await Coupon.create({
-      couponCode: coupon_code.toUpperCase().trim(),
+    const coupon = await Coupon.create({
+      couponCode: coupon_code.toUpperCase(),
       discountType: discount_type,
       discountValue: Number(discount_value),
       minCartValue: Number(min_cart_value) || 0,
@@ -38,16 +39,24 @@ exports.addCoupon = async (req, res) => {
       isActive: true
     });
 
-    res.status(201).json({ message: "Coupon added successfully." });
+    res.status(201).json({
+      success: true,
+      message: "Coupon added successfully.",
+      coupon
+    });
 
   } catch (err) {
     console.error("Error adding coupon:", err);
 
     if (err.code === 11000) {
-      return res.status(409).json({ error: "Coupon code already exists." });
+      return res.status(409).json({
+        error: "Coupon code already exists."
+      });
     }
 
-    res.status(500).json({ error: "Server error while adding coupon." });
+    res.status(500).json({
+      error: "Server error while adding coupon."
+    });
   }
 };
 
