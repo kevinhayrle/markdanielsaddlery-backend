@@ -12,7 +12,6 @@ exports.addProduct = async (req, res) => {
     description,
     price,
     discounted_price,
-    sort_order,
     image_url,
     category,
     sizes,
@@ -38,8 +37,7 @@ exports.addProduct = async (req, res) => {
         ? sizes
         : typeof sizes === "string"
         ? sizes.split(",")
-        : [],
-      sortOrder: Number(sort_order ?? 0)
+        : []
     });
 
     // 2️⃣ Extra images
@@ -75,7 +73,6 @@ exports.getAllProducts = async (req, res) => {
   try {
     const products = await Product
       .find()
-      .sort({ sortOrder: 1, createdAt: -1 })
       .lean();
 
     res.json(products);
@@ -124,7 +121,6 @@ exports.updateProduct = async (req, res) => {
     description,
     price,
     discounted_price,
-    sort_order,
     image_url,
     category,
     sizes,
@@ -141,7 +137,6 @@ exports.updateProduct = async (req, res) => {
       description,
       price,
       discountedPrice: discounted_price,
-      sortOrder: Number(sort_order ?? 0),
       imageUrl: image_url,
       category,
       sizes: Array.isArray(sizes)
@@ -212,33 +207,5 @@ exports.deleteProduct = async (req, res) => {
   } catch (err) {
     console.error("Error deleting product:", err);
     res.status(500).json({ error: "Server error while deleting product." });
-  }
-};
-
-/*
-================================================
-✅ UPDATE PRODUCT SORT ORDER
-================================================
-*/
-exports.updateProductOrder = async (req, res) => {
-  const order = req.body;
-
-  if (!Array.isArray(order)) {
-    return res.status(400).json({ error: "Invalid order data" });
-  }
-
-  try {
-    await Promise.all(
-      order.map(item =>
-        Product.findByIdAndUpdate(item.id, {
-          sortOrder: Number(item.sort_order)
-        })
-      )
-    );
-
-    res.json({ message: "Product order updated successfully" });
-  } catch (err) {
-    console.error("Error updating product order:", err);
-    res.status(500).json({ error: "Failed to update order" });
   }
 };

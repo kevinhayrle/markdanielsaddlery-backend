@@ -8,7 +8,6 @@ const ProductSchema = new mongoose.Schema({
   imageUrl: String,
   category: String,
   sizes: [String],         // ["S","M","L","XL"]
-  sortOrder: Number
 }, { timestamps: { createdAt: true, updatedAt: false } });
 
 module.exports = mongoose.model("Product", ProductSchema);
