@@ -8,7 +8,6 @@ const {
   deleteProduct,
   addProduct,
   updateProduct,
-  updateProductOrder
 } = require('../controllers/productController');
 
 const {
@@ -29,10 +28,8 @@ router.post('/login', adminLogin);
 
 router.get('/products', verifyToken, getAllProducts);
 router.post('/products', verifyToken, addProduct);
-router.put('/products/reorder', verifyToken, updateProductOrder);
 router.put('/products/:id', verifyToken, updateProduct);
 router.delete('/products/:id', verifyToken, deleteProduct);
-
 
 /* =======================
    COUPON ROUTES
