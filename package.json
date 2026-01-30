@@ -17,6 +17,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongodb": "^7.0.0",
     "mongoose": "^9.0.2",
+    "multer": "^2.0.2",
     "mysql2": "^3.14.2",
     "node-mailjet": "^6.0.11",
     "razorpay": "^2.9.6"
