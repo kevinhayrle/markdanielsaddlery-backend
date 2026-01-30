@@ -1,7 +1,5 @@
 require('dotenv').config();
 const express = require('express');
-const path = require('path');
-
 const cors = require("cors");
 
 const connectDB = require("./db"); // MongoDB connection
@@ -26,10 +24,6 @@ app.use(cors({
 
 app.use(express.json());
 console.log('✅ express.json middleware loaded');
-app.use(
-  '/uploads',
-  express.static(path.join(__dirname, 'uploads'))
-);
 
 /* ------------------
    Routes
@@ -40,7 +34,7 @@ try {
   const checkoutRoutes = require("./routes/checkoutRoutes");
   const orderRoutes = require("./routes/orderRoutes");
   const userRoutes = require('./routes/UserRoutes');
-  const uploadRoutes = require('./routes/uploadRoutes');
+
 
   app.use('/api/products', publicProductRoutes);
   app.use('/api/admin', adminRoutes);
@@ -48,8 +42,6 @@ try {
   app.use('/api/checkout', checkoutRoutes);
   app.use('/api', orderRoutes);
   app.use('/api/users', userRoutes);
-  app.use('/api/upload', uploadRoutes);
-
 
 
   console.log('✅ Routes registered');
