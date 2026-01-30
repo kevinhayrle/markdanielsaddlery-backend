@@ -69,17 +69,28 @@ exports.addProduct = async (req, res) => {
 ✅ GET ALL PRODUCTS
 ================================================
 */
-exports.getAllProducts = async (req, res) => {
-  try {
-    const products = await Product
-      .find()
-      .lean();
 
-    res.json(products);
-  } catch (err) {
-    console.error("Error fetching products:", err);
-    res.status(500).json({ error: "Server error." });
-  }
+exports.getAllProducts = async (req, res) => {
+  const products = await Product.find().lean();
+
+  const productIds = products.map(p => p._id);
+
+  const images = await ProductImage.find({
+    productId: { $in: productIds }
+  }).lean();
+
+  const imageMap = {};
+  images.forEach(img => {
+    if (!imageMap[img.productId]) imageMap[img.productId] = [];
+    imageMap[img.productId].push(img.imageUrl);
+  });
+
+  const enrichedProducts = products.map(p => ({
+    ...p,
+    extra_images: imageMap[p._id] || []
+  }));
+
+  res.json(enrichedProducts);
 };
 
 /*
